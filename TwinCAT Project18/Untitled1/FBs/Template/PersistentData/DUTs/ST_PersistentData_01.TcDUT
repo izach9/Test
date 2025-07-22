@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_PersistentData_01" Id="{6974f68c-197e-49d0-a8ca-9c82ce4c6378}">
+    <Declaration><![CDATA[TYPE ST_PersistentData_01 :
+STRUCT
+	nData01		: DINT;
+	nData02		: INT;
+	fData03		: LREAL;
+	bTest01		: BOOL;
+	nTest02		: INT;
+	
+	
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

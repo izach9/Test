@@ -1,0 +1,375 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="Prg_PersistentData" Id="{cdb7388b-c59f-4748-9a27-f9940620fee0}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM Prg_PersistentData
+VAR
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+
+(* Persistent Data 00 ----------------------------------------------------------------*)
+	stPData[0].sFileDirectory	:= 'C:\PersistentData\PersistentData_00\';
+	stPData[0].bEnable			:= TRUE;
+	stPData[0].bAutoLoadBackup	:= TRUE;
+	stPData[0].tWaitTime		:= T#3S;
+	stPData[0].bDontCheckCRC	:= TRUE;
+	
+	fbPData[0](
+		bEnable				:= stPData[0].bEnable,
+		bReset				:= stPData[0].bReset,
+		sFileDirectory		:= stPData[0].sFileDirectory,
+		nAdsPortNumber		:= (*_AppInfo.AdsPort*),
+		bDontCheckCRC		:= stPData[0].bDontCheckCRC,
+		bAutoLoadBackup		:= stPData[0].bAutoLoadBackup,
+		bLoadBackup			:= stPData[0].bLoadBackup,
+		bSaveDefault		:= stPData[0].bSaveDefault,
+		bLoadDefault		:= stPData[0].bLoadDefault,
+		tWaitTime			:= stPData[0].tWaitTime,
+		pAdrrData			:= ADR(stData),
+		nLenData			:= SIZEOF(stData),
+		bWindowsCE			=> stPData[0].bWindowsCE, 
+		bDataInitOk			=> stPData[0].bDataInitOk,
+		bDataFileCreated	=> stPData[0].bDataFileCreated,
+		bDataFromBackup		=> stPData[0].bDataFromBackup,
+		nRemainDataSize		=> stPData[0].nRemainDataSize,
+		bBusy				=> stPData[0].bBusy,
+		bError				=> stPData[0].bError,
+		nErrorId			=> stPData[0].nErrorId,
+		sMessage			=> stPData[0].sMessage,
+		sActualDateTime		=> stPData[0].sActualDateTime, 
+		sFileCreateTime		=> stPData[0].sFileCreateTime, 
+		sFileWriteTime		=> stPData[0].sFileWriteTime, 
+		nFileDataSize		=> stPData[0].nFileDataSize, 
+		nFileWriteCount		=> stPData[0].nFileWriteCount,
+		tFileProcessTime	=> stPData[0].tFileProcessTime );
+	
+	IF stPData[0].bDataInitOk THEN
+		bDataInitialized[0]	:= TRUE;
+		IF stPData[0].bDataFileCreated THEN
+			(* TcPlcData.dat and TcPlcDataBackup.dat file 
+				could not found or never exist, created first time! *)
+			;
+		ELSIF stPData[0].bDataFromBackup THEN
+			(* TcPlcData.dat file could not found, 
+				Data loaded from TcPlcDataBackup.dat  *)
+			;
+		END_IF
+	END_IF
+(* Persistent Data 00 ----------------------------------------------------------------*)
+
+
+(* Receipt List 00 -------------------------------------------------------------------*)
+	stRData[0].sReceiptFolder	:= 'C:\PersistentData\ReceiptList_00\';
+	fbRData[0](
+		bSaveReceipt		:= stRData[0].bSaveReceipt, 
+		bLoadReceipt		:= stRData[0].bLoadReceipt, 
+		bDeleteReceipt		:= stRData[0].bDeleteReceipt, 
+		nSelectedRow		:= stRData[0].nSelectedRow, 
+		bHmiOk				:= stRData[0].bHmiOk,
+		bHmiCancel			:= stRData[0].bHmiCancel,
+		sReceiptName		:= stRData[0].sReceiptName,
+		sReceiptFolder		:= stRData[0].sReceiptFolder, 
+		pAdrrData			:= ADR(stData), 
+		nLenData			:= SIZEOF(stData), 
+		bBusy				=> stRData[0].bBusy, 
+		bDone				=> stRData[0].bDone, 
+		bError				=> stRData[0].bError, 
+		nErrorId			=> stRData[0].nErrorId, 
+		sMessage			=> stRData[0].sMessage, 	 
+		aReceiptFileList	=> stRData[0].aReceiptFileList);
+(* Receipt List 00 -------------------------------------------------------------------*)
+
+
+
+(* Persistent Data 01 ----------------------------------------------------------------*)
+	stPData[1].sFileDirectory	:='C:\PersistentData\ReceiptData_01\';
+	stPData[1].bEnable			:= TRUE;
+	stPData[1].bAutoLoadBackup	:= TRUE;
+	stPData[1].tWaitTime		:= T#3S;
+	stPData[1].bDontCheckCRC	:= TRUE;
+	
+	fbPData[1](
+		bEnable				:= stPData[1].bEnable,
+		bReset				:= stPData[1].bReset,
+		sFileDirectory		:= stPData[1].sFileDirectory,
+		nAdsPortNumber		:= (*_AppInfo.AdsPort*),
+		bDontCheckCRC		:= stPData[1].bDontCheckCRC,
+		bAutoLoadBackup		:= stPData[1].bAutoLoadBackup,
+		bLoadBackup			:= stPData[1].bLoadBackup,
+		bSaveDefault		:= stPData[1].bSaveDefault,
+		bLoadDefault		:= stPData[1].bLoadDefault,
+		tWaitTime			:= stPData[1].tWaitTime,
+		pAdrrData			:= ADR(stReceipt_01),
+		nLenData			:= SIZEOF(stReceipt_01),
+		bWindowsCE			=> stPData[1].bWindowsCE, 
+		bDataInitOk			=> stPData[1].bDataInitOk,
+		bDataFileCreated	=> stPData[1].bDataFileCreated,
+		bDataFromBackup		=> stPData[1].bDataFromBackup,
+		nRemainDataSize		=> stPData[1].nRemainDataSize,
+		bBusy				=> stPData[1].bBusy,
+		bError				=> stPData[1].bError,
+		nErrorId			=> stPData[1].nErrorId,
+		sMessage			=> stPData[1].sMessage,
+		sActualDateTime		=> stPData[1].sActualDateTime, 
+		sFileCreateTime		=> stPData[1].sFileCreateTime, 
+		sFileWriteTime		=> stPData[1].sFileWriteTime, 
+		nFileDataSize		=> stPData[1].nFileDataSize, 
+		nFileWriteCount		=> stPData[1].nFileWriteCount,
+		tFileProcessTime	=> stPData[1].tFileProcessTime );
+	
+	IF stPData[1].bDataInitOk THEN
+		bDataInitialized[1]	:= TRUE;
+		IF stPData[1].bDataFileCreated THEN
+			(* TcPlcData.dat and TcPlcDataBackup.dat file 
+				could not found or never exist, created first time! *)
+			;
+		ELSIF stPData[1].bDataFromBackup THEN
+			(* TcPlcData.dat file could not found, 
+				Data loaded from TcPlcDataBackup.dat  *)
+			;
+		END_IF
+	END_IF
+(* Persistent Data 01 ----------------------------------------------------------------*)
+
+
+(* Receipt List 01 -------------------------------------------------------------------*)
+	stRData[1].sReceiptFolder	:= 'C:\PersistentData\ReceiptList_01\';
+	fbRData[1](
+		bSaveReceipt		:= stRData[1].bSaveReceipt, 
+		bLoadReceipt		:= stRData[1].bLoadReceipt, 
+		bDeleteReceipt		:= stRData[1].bDeleteReceipt, 
+		nSelectedRow		:= stRData[1].nSelectedRow, 
+		bHmiOk				:= stRData[1].bHmiOk,
+		bHmiCancel			:= stRData[1].bHmiCancel,
+		sReceiptName		:= stRData[1].sReceiptName,
+		sReceiptFolder		:= stRData[1].sReceiptFolder, 
+		pAdrrData			:= ADR(stReceipt_01), 
+		nLenData			:= SIZEOF(stReceipt_01), 
+		bBusy				=> stRData[1].bBusy, 
+		bDone				=> stRData[1].bDone, 
+		bError				=> stRData[1].bError, 
+		nErrorId			=> stRData[1].nErrorId, 
+		sMessage			=> stRData[1].sMessage, 	 
+		aReceiptFileList	=> stRData[1].aReceiptFileList);
+(* Receipt List 01 -------------------------------------------------------------------*)
+
+
+(*
+	(* Persistent Data 02 ----------------------------------------------------------------*)
+		stPData[2].sFileDirectory	:= 'C:\PersistentData\ReceiptData_02\';
+		stPData[2].bEnable			:= TRUE;
+		stPData[2].bAutoLoadBackup	:= TRUE;
+		stPData[2].tWaitTime		:= T#3S;
+		stPData[2].bDontCheckCRC	:= TRUE;
+		
+		fbPData[2](
+			bEnable				:= stPData[2].bEnable,
+			bReset				:= stPData[2].bReset,
+			sFileDirectory		:= stPData[2].sFileDirectory,
+			nAdsPortNumber		:= (*_AppInfo.AdsPort*),
+			bDontCheckCRC		:= stPData[2].bDontCheckCRC,
+			bAutoLoadBackup		:= stPData[2].bAutoLoadBackup,
+			bLoadBackup			:= stPData[2].bLoadBackup,
+			bSaveDefault		:= stPData[2].bSaveDefault,
+			bLoadDefault		:= stPData[2].bLoadDefault,
+			tWaitTime			:= stPData[2].tWaitTime,
+			pAdrrData			:= ADR(stReceipt_02),
+			nLenData			:= SIZEOF(stReceipt_02),
+			bWindowsCE			=> stPData[2].bWindowsCE, 
+			bDataInitOk			=> stPData[2].bDataInitOk,
+			bDataFileCreated	=> stPData[2].bDataFileCreated,
+			bDataFromBackup		=> stPData[2].bDataFromBackup,
+			nRemainDataSize		=> stPData[2].nRemainDataSize,
+			bBusy				=> stPData[2].bBusy,
+			bError				=> stPData[2].bError,
+			nErrorId			=> stPData[2].nErrorId,
+			sMessage			=> stPData[2].sMessage,
+			sActualDateTime		=> stPData[2].sActualDateTime, 
+			sFileCreateTime		=> stPData[2].sFileCreateTime, 
+			sFileWriteTime		=> stPData[2].sFileWriteTime, 
+			nFileDataSize		=> stPData[2].nFileDataSize, 
+			nFileWriteCount		=> stPData[2].nFileWriteCount,
+			tFileProcessTime	=> stPData[2].tFileProcessTime );
+		
+		IF stPData[2].bDataInitOk THEN
+			bDataInitialized[2]	:= TRUE;
+			IF stPData[2].bDataFileCreated THEN
+				(* TcPlcData.dat and TcPlcDataBackup.dat file 
+					could not found or never exist, created first time! *)
+				;
+			ELSIF stPData[2].bDataFromBackup THEN
+				(* TcPlcData.dat file could not found, 
+					Data loaded from TcPlcDataBackup.dat  *)
+				;
+			END_IF
+		END_IF
+	(* Persistent Data 02 ----------------------------------------------------------------*)
+	
+	
+	(* Receipt List 02 -------------------------------------------------------------------*)
+		stRData[2].sReceiptFolder	:= 'C:\PersistentData\ReceiptList_02\';
+		fbRData[2](
+			bSaveReceipt		:= stRData[2].bSaveReceipt, 
+			bLoadReceipt		:= stRData[2].bLoadReceipt, 
+			bDeleteReceipt		:= stRData[2].bDeleteReceipt, 
+			nSelectedRow		:= stRData[2].nSelectedRow, 
+			bHmiOk				:= stRData[2].bHmiOk,
+			bHmiCancel			:= stRData[2].bHmiCancel,
+			sReceiptName		:= stRData[2].sReceiptName,
+			sReceiptFolder		:= stRData[2].sReceiptFolder, 
+			pAdrrData			:= ADR(stReceipt_02), 
+			nLenData			:= SIZEOF(stReceipt_02), 
+			bBusy				=> stRData[2].bBusy, 
+			bDone				=> stRData[2].bDone, 
+			bError				=> stRData[2].bError, 
+			nErrorId			=> stRData[2].nErrorId, 
+			sMessage			=> stRData[2].sMessage, 	 
+			aReceiptFileList	=> stRData[2].aReceiptFileList);
+	(* Receipt List 02 -------------------------------------------------------------------*)
+*)
+
+(*
+	(* Persistent Data 03 ----------------------------------------------------------------*)
+		stPData[3].sFileDirectory	:= 'C:\PersistentData\ReceiptData_03\';
+		stPData[3].bEnable			:= TRUE;
+		stPData[3].bAutoLoadBackup	:= TRUE;
+		stPData[3].tWaitTime		:= T#3S;
+		stPData[3].bDontCheckCRC	:= TRUE;
+		
+		fbPData[3](
+			bEnable				:= stPData[3].bEnable,
+			bReset				:= stPData[3].bReset,
+			sFileDirectory		:= stPData[3].sFileDirectory,
+			nAdsPortNumber		:= (*_AppInfo.AdsPort*),
+			bDontCheckCRC		:= stPData[3].bDontCheckCRC,
+			bAutoLoadBackup		:= stPData[3].bAutoLoadBackup,
+			bLoadBackup			:= stPData[3].bLoadBackup,
+			bSaveDefault		:= stPData[3].bSaveDefault,
+			bLoadDefault		:= stPData[3].bLoadDefault,
+			tWaitTime			:= stPData[3].tWaitTime,
+			pAdrrData			:= ADR(stReceipt_03),
+			nLenData			:= SIZEOF(stReceipt_03),
+			bWindowsCE			=> stPData[3].bWindowsCE, 
+			bDataInitOk			=> stPData[3].bDataInitOk,
+			bDataFileCreated	=> stPData[3].bDataFileCreated,
+			bDataFromBackup		=> stPData[3].bDataFromBackup,
+			nRemainDataSize		=> stPData[3].nRemainDataSize,
+			bBusy				=> stPData[3].bBusy,
+			bError				=> stPData[3].bError,
+			nErrorId			=> stPData[3].nErrorId,
+			sMessage			=> stPData[3].sMessage,
+			sActualDateTime		=> stPData[3].sActualDateTime, 
+			sFileCreateTime		=> stPData[3].sFileCreateTime, 
+			sFileWriteTime		=> stPData[3].sFileWriteTime, 
+			nFileDataSize		=> stPData[3].nFileDataSize, 
+			nFileWriteCount		=> stPData[3].nFileWriteCount,
+			tFileProcessTime	=> stPData[3].tFileProcessTime );
+		
+		IF stPData[3].bDataInitOk THEN
+			bDataInitialized[3]	:= TRUE;
+			IF stPData[3].bDataFileCreated THEN
+				(* TcPlcData.dat and TcPlcDataBackup.dat file 
+					could not found or never exist, created first time! *)
+				;
+			ELSIF stPData[3].bDataFromBackup THEN
+				(* TcPlcData.dat file could not found, 
+					Data loaded from TcPlcDataBackup.dat  *)
+				;
+			END_IF
+		END_IF
+	(* Persistent Data 03 ----------------------------------------------------------------*)
+	
+	
+	(* Receipt List 03 -------------------------------------------------------------------*)
+		stRData[3].sReceiptFolder	:= 'C:\PersistentData\ReceiptList_03\';
+		fbRData[3](
+			bSaveReceipt		:= stRData[3].bSaveReceipt, 
+			bLoadReceipt		:= stRData[3].bLoadReceipt, 
+			bDeleteReceipt		:= stRData[3].bDeleteReceipt, 
+			nSelectedRow		:= stRData[3].nSelectedRow, 
+			bHmiOk				:= stRData[3].bHmiOk,
+			bHmiCancel			:= stRData[3].bHmiCancel,
+			sReceiptName		:= stRData[3].sReceiptName,
+			sReceiptFolder		:= stRData[3].sReceiptFolder, 
+			pAdrrData			:= ADR(stReceipt_03), 
+			nLenData			:= SIZEOF(stReceipt_03), 
+			bBusy				=> stRData[3].bBusy, 
+			bDone				=> stRData[3].bDone, 
+			bError				=> stRData[3].bError, 
+			nErrorId			=> stRData[3].nErrorId, 
+			sMessage			=> stRData[3].sMessage, 	 
+			aReceiptFileList	=> stRData[3].aReceiptFileList);
+	(* Receipt List 03 -------------------------------------------------------------------*)
+*)
+	
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="Prg_PersistentData">
+      <LineId Id="221" Count="1" />
+      <LineId Id="178" Count="0" />
+      <LineId Id="242" Count="0" />
+      <LineId Id="287" Count="3" />
+      <LineId Id="704" Count="0" />
+      <LineId Id="4" Count="1" />
+      <LineId Id="42" Count="0" />
+      <LineId Id="209" Count="0" />
+      <LineId Id="131" Count="0" />
+      <LineId Id="43" Count="0" />
+      <LineId Id="6" Count="3" />
+      <LineId Id="11" Count="2" />
+      <LineId Id="101" Count="0" />
+      <LineId Id="14" Count="0" />
+      <LineId Id="162" Count="0" />
+      <LineId Id="160" Count="0" />
+      <LineId Id="15" Count="0" />
+      <LineId Id="17" Count="2" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="97" Count="3" />
+      <LineId Id="96" Count="0" />
+      <LineId Id="175" Count="0" />
+      <LineId Id="20" Count="2" />
+      <LineId Id="164" Count="1" />
+      <LineId Id="170" Count="0" />
+      <LineId Id="172" Count="0" />
+      <LineId Id="167" Count="1" />
+      <LineId Id="171" Count="0" />
+      <LineId Id="174" Count="0" />
+      <LineId Id="166" Count="0" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="208" Count="0" />
+      <LineId Id="674" Count="1" />
+      <LineId Id="683" Count="18" />
+      <LineId Id="676" Count="0" />
+      <LineId Id="682" Count="0" />
+      <LineId Id="224" Count="1" />
+      <LineId Id="243" Count="1" />
+      <LineId Id="292" Count="1" />
+      <LineId Id="291" Count="0" />
+      <LineId Id="705" Count="0" />
+      <LineId Id="294" Count="0" />
+      <LineId Id="245" Count="41" />
+      <LineId Id="330" Count="0" />
+      <LineId Id="226" Count="1" />
+      <LineId Id="332" Count="0" />
+      <LineId Id="295" Count="4" />
+      <LineId Id="369" Count="1" />
+      <LineId Id="313" Count="0" />
+      <LineId Id="300" Count="5" />
+      <LineId Id="310" Count="0" />
+      <LineId Id="307" Count="0" />
+      <LineId Id="228" Count="1" />
+      <LineId Id="671" Count="0" />
+      <LineId Id="361" Count="0" />
+      <LineId Id="443" Count="5" />
+      <LineId Id="706" Count="0" />
+      <LineId Id="449" Count="42" />
+      <LineId Id="670" Count="0" />
+      <LineId Id="493" Count="21" />
+      <LineId Id="593" Count="6" />
+      <LineId Id="707" Count="0" />
+      <LineId Id="600" Count="67" />
+      <LineId Id="223" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

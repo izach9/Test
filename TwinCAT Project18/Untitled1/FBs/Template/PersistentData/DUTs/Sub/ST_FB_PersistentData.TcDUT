@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <DUT Name="ST_FB_PersistentData" Id="{9d9b9048-c53c-4e4e-9fd9-22e003123b54}">
+    <Declaration><![CDATA[TYPE ST_FB_PersistentData :
+STRUCT
+	//Inputs
+	bEnable				: BOOL;
+	bReset				: BOOL;
+	sFileDirectory		: STRING;
+	nAdsPortNumber		: UINT;
+	bAutoLoadBackup		: BOOL;
+	bLoadBackup			: BOOL;
+	bSaveDefault		: BOOL;
+	bLoadDefault		: BOOL;
+	bDontCheckCRC		: BOOL;
+	pAdrrData			: PVOID;
+	nLenData			: UDINT;
+	tWaitTime			: TIME	:= T#5S;
+
+	//Outputs
+	bWindowsCE			: BOOL;
+	bDataInitOk			: BOOL;
+	bDataFileCreated	: BOOL;
+	bDataFromBackup		: BOOL;
+	nRemainDataSize		: DINT;
+	bBusy				: BOOL;
+	bError				: BOOL;
+	nErrorId			: UDINT;
+	sMessage			: STRING(255);
+	sActualDateTime		: STRING(23);
+	sFileCreateTime		: STRING(23);
+	sFileWriteTime		: STRING(23);
+	nFileDataSize		: UDINT;
+	nFileWriteCount		: UDINT;
+	tFileProcessTime	: TIME;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

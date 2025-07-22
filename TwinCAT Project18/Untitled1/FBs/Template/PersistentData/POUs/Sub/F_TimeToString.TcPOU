@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="F_TimeToString" Id="{4e52a5bd-8489-4ea3-ae63-48c17dea4323}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION F_TimeToString : STRING
+VAR_INPUT
+	tActualTime		: TIMESTRUCT;
+END_VAR
+VAR
+	sTimeStamp		: STRING;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[sTimeStamp	:= '';
+
+IF tActualTime.wDay > 0 THEN
+	sTimeStamp 	:=  RIGHT(CONCAT('00',WORD_TO_STRING(tActualTime.wDay)),2);
+	sTimeStamp 	:= CONCAT(sTimeStamp, '/');
+	sTimeStamp 	:= CONCAT(sTimeStamp ,RIGHT(CONCAT('00', WORD_TO_STRING(tActualTime.wMonth)),2));
+	sTimeStamp 	:= CONCAT(sTimeStamp , '/');
+	sTimeStamp 	:= CONCAT(sTimeStamp , RIGHT(CONCAT('0000', WORD_TO_STRING(tActualTime.wYear)),4));
+	sTimeStamp 	:= CONCAT(sTimeStamp , ' ');
+	sTimeStamp 	:= CONCAT(sTimeStamp , RIGHT(CONCAT('00', WORD_TO_STRING(tActualTime.wHour)),2));
+	sTimeStamp 	:= CONCAT(sTimeStamp , ':');
+	sTimeStamp 	:= CONCAT(sTimeStamp , RIGHT(CONCAT('00', WORD_TO_STRING(tActualTime.wMinute)),2));
+	sTimeStamp 	:= CONCAT(sTimeStamp , ':');
+	sTimeStamp 	:= CONCAT(sTimeStamp , RIGHT(CONCAT('00', WORD_TO_STRING(tActualTime.wSecond)),2));
+ELSE
+	sTimeStamp	:= '---';
+END_IF
+
+F_TimeToString	:= sTimeStamp;]]></ST>
+    </Implementation>
+    <LineIds Name="F_TimeToString">
+      <LineId Id="10" Count="17" />
+      <LineId Id="7" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

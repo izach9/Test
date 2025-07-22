@@ -1,0 +1,263 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="FB_FileReadWrite" Id="{3ea797eb-c953-4424-8863-845be5b95521}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_FileReadWrite
+VAR_INPUT
+	sFilePath			: STRING(255);
+	bRead				: BOOL;
+	bWrite				: BOOL;
+	pAdrrData			: PVOID;
+	nLenData			: UDINT;
+END_VAR
+VAR_OUTPUT
+	bBusy				: BOOL;
+	bDone				: BOOL;
+	bError				: BOOL;
+	nErrorId			: UDINT;
+	sMessage			: STRING(255);
+	tLastProcessTime	: TIME;
+END_VAR
+VAR
+	fbFileOpen			: FB_FileOpen;
+	fbFileRead			: FB_FileRead;
+	fbFileWrite			: FB_FileWrite;
+	fbFileClose			: FB_FileClose;
+	fbFBusyTrig			: F_TRIG;
+	fbProcessTime		: TON;
+	hFile				: UINT;
+	nState				: INT;
+	nLastState			: INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+fbFBusyTrig(CLK:= bBusy, Q=> );
+IF fbFBusyTrig.Q THEN
+	tLastProcessTime	:= fbProcessTime.ET;
+END_IF
+fbProcessTime(IN:= bBusy, PT:= T#1M );
+
+
+CASE nState OF
+
+0:
+	bBusy			:= FALSE;
+	bDone			:= FALSE;
+	bError			:= FALSE;
+	nErrorId		:= 0;
+
+	IF bRead THEN
+		bBusy		:= TRUE;
+		nState		:= 100;
+		nLastState	:= nState;
+	ELSIF bWrite THEN
+		bBusy		:= TRUE;
+		nState		:= 200;
+		nLastState	:= nState;
+	END_IF	
+
+(******************************************************)
+(* Read From File	*)
+100:
+	fbFileOpen(
+		sNetId		:= '', 
+		sPathName	:= sFilePath, 
+		nMode		:= FOPEN_MODEREAD OR FOPEN_MODEBINARY, 
+		ePath		:= PATH_GENERIC, 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S );
+		
+	IF NOT fbFileOpen.bError AND NOT fbFileOpen.bBusy THEN
+		fbFileOpen(bExecute := FALSE);
+		hFile		:= fbFileOpen.hFile;
+		nState		:= 110;
+		nLastState	:= nState;
+	ELSIF fbFileOpen.bError THEN
+		fbFileOpen(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileOpen function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileOpen.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+110:
+	fbFileRead(
+		sNetId		:= '', 
+		hFile		:= hFile, 
+		pReadBuff	:= pAdrrData, 
+		cbReadLen	:= nLenData, 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#5S );
+		
+	IF NOT fbFileRead.bError AND NOT fbFileRead.bBusy THEN
+		fbFileRead(bExecute := FALSE);
+		nState		:= 120;
+		nLastState	:= nState;
+	ELSIF fbFileRead.bError THEN
+		fbFileRead(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileRead function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileRead.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+120:
+	fbFileClose(
+		sNetId		:= '', 
+		hFile		:= hFile, 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S );
+		
+	IF NOT fbFileClose.bError AND NOT fbFileClose.bBusy THEN
+		fbFileClose(bExecute := FALSE);
+		nState		:= 400;
+		nLastState	:= nState;
+	ELSIF fbFileClose.bError THEN
+		fbFileClose(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileClose function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileClose.nErrId;
+		nState		:= 9000;
+	END_IF	
+
+(******************************************************)
+(* Write To File	*)
+200:
+	fbFileOpen(
+		sNetId		:= '', 
+		sPathName	:= sFilePath, 
+		nMode		:= FOPEN_MODEWRITE OR FOPEN_MODEBINARY, 
+		ePath		:= PATH_GENERIC, 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S );
+		
+	IF NOT fbFileOpen.bError AND NOT fbFileOpen.bBusy THEN
+		fbFileOpen(bExecute := FALSE);
+		hFile		:= fbFileOpen.hFile;
+		nState		:= 210;
+		nLastState	:= nState;
+	ELSIF fbFileOpen.bError THEN
+		fbFileOpen(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileOpen function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileOpen.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+210:
+	fbFileWrite(
+		sNetId		:= '', 
+		hFile		:= hFile, 
+		pWriteBuff	:= pAdrrData, 
+		cbWriteLen	:= nLenData, 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S);
+
+	IF NOT fbFileWrite.bError AND NOT fbFileWrite.bBusy THEN
+		fbFileWrite(bExecute := FALSE);
+		nState		:= 220;
+		nLastState	:= nState;
+	ELSIF fbFileWrite.bError THEN
+		fbFileWrite(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileWrite function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileWrite.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+220:
+	fbFileClose(
+		sNetId		:= '', 
+		hFile		:= hFile, 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S );
+		
+	IF NOT fbFileClose.bError AND NOT fbFileClose.bBusy THEN
+		fbFileClose(bExecute := FALSE);
+		nState		:= 400;
+		nLastState	:= nState;
+	ELSIF fbFileClose.bError THEN
+		fbFileClose(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileClose function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileClose.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+(******************************************************)
+(* Operation is succesfull *)
+400:
+	bBusy	:= FALSE;
+	bDone	:= TRUE;
+	IF NOT bRead AND NOT bWrite THEN
+		nState		:= 0;
+		nLastState	:= nState;
+	END_IF
+	
+(******************************************************)
+(* Operation has an error *)
+9000:	
+	bBusy	:= FALSE;
+	IF NOT bRead AND NOT bWrite THEN
+		nState		:= 0;
+		nLastState	:= nState;
+	END_IF
+
+END_CASE]]></ST>
+    </Implementation>
+    <LineIds Name="FB_FileReadWrite">
+      <LineId Id="237" Count="0" />
+      <LineId Id="233" Count="0" />
+      <LineId Id="238" Count="2" />
+      <LineId Id="234" Count="0" />
+      <LineId Id="236" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="31" Count="0" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="103" Count="0" />
+      <LineId Id="106" Count="0" />
+      <LineId Id="104" Count="0" />
+      <LineId Id="102" Count="0" />
+      <LineId Id="101" Count="0" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="241" Count="0" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="107" Count="0" />
+      <LineId Id="97" Count="0" />
+      <LineId Id="242" Count="0" />
+      <LineId Id="100" Count="0" />
+      <LineId Id="108" Count="0" />
+      <LineId Id="99" Count="0" />
+      <LineId Id="200" Count="0" />
+      <LineId Id="198" Count="0" />
+      <LineId Id="96" Count="0" />
+      <LineId Id="93" Count="0" />
+      <LineId Id="33" Count="14" />
+      <LineId Id="111" Count="0" />
+      <LineId Id="49" Count="34" />
+      <LineId Id="85" Count="7" />
+      <LineId Id="32" Count="0" />
+      <LineId Id="199" Count="0" />
+      <LineId Id="115" Count="0" />
+      <LineId Id="197" Count="0" />
+      <LineId Id="117" Count="0" />
+      <LineId Id="120" Count="58" />
+      <LineId Id="116" Count="0" />
+      <LineId Id="179" Count="0" />
+      <LineId Id="201" Count="1" />
+      <LineId Id="180" Count="2" />
+      <LineId Id="185" Count="1" />
+      <LineId Id="188" Count="0" />
+      <LineId Id="187" Count="0" />
+      <LineId Id="189" Count="0" />
+      <LineId Id="203" Count="1" />
+      <LineId Id="190" Count="0" />
+      <LineId Id="192" Count="0" />
+      <LineId Id="194" Count="2" />
+      <LineId Id="191" Count="0" />
+      <LineId Id="30" Count="0" />
+      <LineId Id="29" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

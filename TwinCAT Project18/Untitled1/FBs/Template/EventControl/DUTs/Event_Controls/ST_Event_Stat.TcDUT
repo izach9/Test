@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <DUT Name="ST_Event_Stat" Id="{099f33f6-e4f4-4be1-8843-91f4e593b707}">
+    <Declaration><![CDATA[TYPE ST_Event_Stat :
+STRUCT
+	dq_RedLamp		:BOOL;
+	dq_GreenLamp	:BOOL;
+	dq_YellowLamp	:BOOL;
+	dq_Klaxon		:BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

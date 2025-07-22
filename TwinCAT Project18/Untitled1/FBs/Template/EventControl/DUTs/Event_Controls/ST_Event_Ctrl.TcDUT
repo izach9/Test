@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <DUT Name="ST_Event_Ctrl" Id="{7f60ce91-e5c6-4242-96a4-6b33eb196f37}">
+    <Declaration><![CDATA[TYPE ST_Event_Ctrl :
+STRUCT
+	bPlcEvents		:BOOL:=TRUE;	(*Execution of PLC Events*)
+	bNcEvents		:BOOL:=TRUE;	(*Execution of NC Events*)
+	bDriveEvents	:BOOL:=TRUE;	(*Execution of Drive Events*)
+
+	nTimeFormat		:INT:=0; (* 0: TIME, 1: DATE&TIME , 2: DATE *)
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

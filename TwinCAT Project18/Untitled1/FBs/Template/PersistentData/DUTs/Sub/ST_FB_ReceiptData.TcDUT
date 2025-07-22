@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <DUT Name="ST_FB_ReceiptData" Id="{4f50d7b9-fced-4fe1-9257-0eef64eac539}">
+    <Declaration><![CDATA[TYPE ST_FB_ReceiptData :
+STRUCT
+(* Inputs *)
+	bSaveReceipt			: BOOL;
+	bLoadReceipt			: BOOL;
+	bDeleteReceipt			: BOOL;
+	nSelectedRow			: INT;
+	bHmiOk					: BOOL;
+	bHmiCancel				: BOOL;
+	sReceiptName			: STRING;
+	sReceiptFolder			: STRING;
+(* Outputs *)
+	bBusy					: BOOL;
+	bDone					: BOOL;
+	bError					: BOOL;
+	nErrorId				: UDINT;	
+	sMessage				: STRING;
+	aReceiptFileList		: ARRAY[0..nReceiptNum] OF STRING;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

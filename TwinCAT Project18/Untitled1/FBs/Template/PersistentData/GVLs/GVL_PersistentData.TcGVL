@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <GVL Name="GVL_PersistentData" Id="{ef038c70-08af-4fd6-b732-59501f212e24}">
+    <Declaration><![CDATA[VAR_GLOBAL	
+	fbPData					: ARRAY[0..nPDataNum] OF FB_PersistentData;
+	stPData					: ARRAY[0..nPDataNum] OF ST_FB_PersistentData;
+	fbRData					: ARRAY[0..nPDataNum] OF FB_ReceiptData;
+	stRData					: ARRAY[0..nPDataNum] OF ST_FB_ReceiptData;	
+	bDataInitialized		: ARRAY[0..nPDataNum] OF BOOL;
+
+	(* Persistent Data*)
+	stData					: ST_PersistentData_00;
+	stReceipt_01			: ST_PersistentData_01;
+	stReceipt_02			: ST_PersistentData_02;	
+	stReceipt_03			: ST_PersistentData_03;		
+	
+	nMessageId				: UINT;
+END_VAR
+
+VAR_GLOBAL CONSTANT
+	nPDataNum				: UINT :=3;
+	nReceiptNum				: UINT :=99;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

@@ -1,0 +1,1020 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="FB_PersistentData" Id="{cf70c384-d9fa-4db9-8ece-5e3b62cc9b05}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_PersistentData
+VAR_INPUT
+	bEnable				: BOOL;
+	bReset				: BOOL;
+	sFileDirectory		: STRING;
+	nAdsPortNumber		: UINT;
+	bAutoLoadBackup		: BOOL;
+	bLoadBackup			: BOOL;
+	bSaveDefault		: BOOL;
+	bLoadDefault		: BOOL;
+	bDontCheckCRC		: BOOL;
+	pAdrrData			: PVOID;
+	nLenData			: UDINT;
+	tWaitTime			: TIME	:= T#5S;
+END_VAR
+VAR_OUTPUT
+	bWindowsCE			: BOOL;
+	bDataInitOk			: BOOL;
+	bDataFileCreated	: BOOL;
+	bDataFromBackup		: BOOL;
+	nRemainDataSize		: DINT;
+	bBusy				: BOOL;
+	bError				: BOOL;
+	nErrorId			: UDINT;
+	sMessage			: STRING(255);
+	sActualDateTime		: STRING(23);
+	sFileCreateTime		: STRING(23);
+	sFileWriteTime		: STRING(23);
+	nFileDataSize		: UDINT;
+	nFileWriteCount		: UDINT;
+	tFileProcessTime	: TIME;
+END_VAR
+VAR
+	fbGetTime			: NT_GetTime;
+	fbGetDeviceIdent	: FB_GetDeviceIdentificationEx;
+	fbCreateFolder		: FB_CreateDir;
+	fbFileEntry			: FB_EnumFindFileEntry;
+	stFileInfo			: ST_FindFileEntry;
+	fbFileReadWrite		: FB_FileReadWrite;
+	fbTrigLoadBackup	: R_TRIG;
+	fbTrigSaveDefault	: R_TRIG;
+	fbTrigLoadDefault	: R_TRIG;
+	fbTrigReset			: R_TRIG;
+	fbTimerTick			: TON;
+	fbWaitTimer			: TON;
+	fbWaitTimeout		: TON;
+	pDataAddr			: PVOID;
+	arrDataActual		: ARRAY[1..cnMaxDataSize] OF BYTE;
+	sFilePath			: STRING;
+	sFileExtension		: STRING;
+	nState				: INT;
+	nLastState			: INT;
+	nCompareResult		: DINT;
+	bBackupLoaded		: BOOL;
+	bDefaultLoaded		: BOOL;
+	bDataUnsaved		: BOOL;	
+	bStartDelay			: BOOL;
+	bCreateBackup		: BOOL;
+	nLastMaxDataSize	: UDINT;
+END_VAR
+VAR CONSTANT
+	tTimeoutTime		: TIME		:= T#120S;
+	cnVersion			: STRING	:= 'V1.2.0.0';
+	cnMaxDataSize		: UDINT		:= 16384;
+	cnDiagDataSize		: UDINT		:= 60;
+	cnCrcCheckNo		: ARRAY[1..4] OF BYTE	:= [99, 89, 43, 17];
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+(* Read/Write function block call cyclically *)
+fbFileReadWrite();
+
+(* Get actual date-time*)
+fbTimerTick(IN:= ((NOT fbTimerTick.Q) AND (nState > 10)), PT:= T#500MS);
+fbGetTime(START := fbTimerTick.Q, TMOUT := T#1S);
+sActualDateTime	:= F_TimeToString(fbGetTime.TIMESTR);
+
+(* Check if Enable*)
+IF nState > 0 THEN
+	IF NOT bEnable THEN
+		nState	:= 0;
+	END_IF
+END_IF
+
+(* Triggers for actions *)
+fbTrigLoadBackup(CLK:= bLoadBackup );
+fbTrigSaveDefault(CLK:= bSaveDefault );
+fbTrigLoadDefault(CLK:= bLoadDefault );
+fbTrigReset(CLK:= bReset );
+
+(* Triggers *)
+IF nState = 0 OR nState = 300 OR nState = 9000 THEN
+	IF fbTrigReset.Q THEN
+		bBusy		:= TRUE;
+		bError		:= FALSE;
+		nErrorId	:= 0;
+		sMessage	:= '';
+		nState		:= 50;
+	END_IF
+	
+	IF fbTrigLoadBackup.Q THEN
+		bBusy		:= TRUE;
+		bError		:= FALSE;
+		nErrorId	:= 0;
+		sMessage	:= '';
+		nState		:= 1000;
+		nLastState	:= nState;
+	END_IF
+	
+	IF fbTrigLoadDefault.Q THEN
+		bBusy		:= TRUE;
+		bError		:= FALSE;
+		nErrorId	:= 0;
+		sMessage	:= '';
+		nState		:= 1100;
+		nLastState	:= nState;
+	END_IF
+	
+	IF fbTrigSaveDefault.Q THEN
+		bBusy		:= TRUE;
+		bError		:= FALSE;
+		nErrorId	:= 0;
+		sMessage	:= '';
+		nState		:= 1200;
+		nLastState	:= nState;
+	END_IF
+END_IF
+
+
+(***************** ================================== *****************)
+(* State Machine for Persistent Data Control *)
+CASE nState OF
+
+0:
+	fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+	fbFileEntry(bExecute := FALSE);
+	fbWaitTimeout(IN:= FALSE);
+	fbWaitTimer(IN:= FALSE);
+
+	bWindowsCE			:= FALSE;
+	bDataInitOk			:= FALSE;
+	bDataFileCreated	:= FALSE;
+	nRemainDataSize		:= 0;
+	bDataFromBackup		:= FALSE;
+	bBusy				:= FALSE;
+	bError				:= FALSE;
+	nErrorId			:= 0;
+	sMessage			:= '';
+	
+	sFileWriteTime		:= '';
+	sFileCreateTime		:= '';
+	nFileDataSize		:= 0;
+	nFileWriteCount		:= 0;
+	
+	bBackupLoaded		:= FALSE;
+	bDefaultLoaded		:= FALSE;
+	bCreateBackup		:= FALSE;
+	
+	(*Set bEnable TRUE to control PersistentData operation*)
+	(*To call other programs use bReady output!*)
+	IF bEnable THEN
+		nLastMaxDataSize	:= cnMaxDataSize;
+		bBusy		:= TRUE;
+		nState		:= 10;
+		nLastState	:= nState;
+	END_IF
+	
+10:
+	IF tWaitTime >= T#1S THEN
+		fbGetTime(START := TRUE, TMOUT := T#1S);
+		IF NOT fbGetTime.BUSY AND NOT fbGetTime.ERR THEN
+			sActualDateTime	:= F_TimeToString(fbGetTime.TIMESTR);
+			nState		:= 20;
+			nLastState	:= nState;
+		ELSIF fbGetTime.ERR THEN
+			sMessage	:= CONCAT(INT_TO_STRING(nState) , ': NT_GetTime function block error!'); 
+			bError		:= TRUE;
+			nErrorId	:= fbGetTime.ERRID;
+			nState		:= 9000;
+		END_IF
+	ELSE
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': tWaitTime is less than 1s!'); 
+		bError		:= TRUE;
+		nErrorId	:= 9900;
+		nState		:= 9000;
+	END_IF
+	
+20:
+	fbGetDeviceIdent( bExecute:= TRUE, tTimeout:= T#1S );
+	IF NOT fbGetDeviceIdent.bBusy AND NOT fbGetDeviceIdent.bError THEN
+		fbGetDeviceIdent( bExecute:= FALSE);
+		IF fbGetDeviceIdent.stDevIdent.strImageOsName = 'Windows CE' THEN
+			bWindowsCE	:= TRUE;
+			(*If IPC Operating system is Windows CE use this path*)
+			IF sFileDirectory='' THEN
+				sFilePath	:= '\Hard Disk\PersistentData\';
+			ELSE
+				sFilePath	:= sFileDirectory;
+			END_IF
+		ELSE
+			bWindowsCE	:= FALSE;
+			(*If IPC Operating system is Windows XPE or higher version use this path*)
+			IF sFileDirectory='' THEN
+				sFilePath	:= 'C:\PersistentData\';
+			ELSE
+				sFilePath	:= sFileDirectory;
+			END_IF
+		END_IF
+		(* If one PC have different PLC Ports, then you can save each one differently by
+			entering AdsPortNumber *)
+		IF nAdsPortNumber > 0 THEN
+			sFileExtension	:= CONCAT( CONCAT('_' , UINT_TO_STRING(nAdsPortNumber)) , '.dat');
+		ELSE
+			sFileExtension	:= '.dat';
+		END_IF
+		nState		:= 30;
+		nLastState	:= nState;
+	ELSIF fbGetDeviceIdent.bError THEN
+		fbGetDeviceIdent( bExecute:= FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_GetDeviceIdentificationEx function block error!'); 
+		bError		:= TRUE;
+		nErrorId	:= fbGetDeviceIdent.nErrorID;
+		nState		:= 9000;
+	END_IF
+
+	
+30:
+	(* Check if the file is exist or not!
+		If file is not exist then check the backup file!*)
+	fbFileEntry(
+		sNetId		:= '', 
+		sPathName	:= CONCAT(sFilePath , CONCAT('TcPlcData' , sFileExtension)), 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S);
+		
+	IF NOT fbFileEntry.bError AND NOT fbFileEntry.bBusy THEN
+		fbFileEntry(bExecute := FALSE);
+		stFileInfo	:= fbFileEntry.stFindFile;
+		IF stFileInfo.sFileName = '' THEN
+			(* File is not exist, check for the BackupFile is exist?*)
+			nState		:= 40;
+			nLastState	:= nState;
+		ELSE
+			(* File is exist!*)
+			nState		:= 100;
+			nLastState	:= nState;
+		END_IF
+	ELSIF fbFileEntry.bError THEN
+		fbFileEntry(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_EnumFindFileEntry function block error!'); 
+		bError		:= TRUE;
+		nErrorId	:= fbFileEntry.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+40:
+	(* Check if the backup file is exist or not!
+		If backup file is not exist then create folder and the file first!*)
+	fbFileEntry(
+		sNetId		:= '', 
+		sPathName	:= CONCAT(sFilePath , CONCAT('TcPlcDataBackup' , sFileExtension)), 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S);
+		
+	IF NOT fbFileEntry.bError AND NOT fbFileEntry.bBusy THEN
+		fbFileEntry(bExecute := FALSE);
+		stFileInfo	:= fbFileEntry.stFindFile;
+		IF stFileInfo.sFileName = '' THEN
+			(* Backup file never exist, create folder and file!*)
+			nState		:= 50;
+			nLastState	:= nState;
+		ELSE
+			(* File is exist!*)
+			IF bAutoLoadBackup THEN
+				(* Load data from backup file! *)
+				nState		:= 110;
+				nLastState	:= nState;
+			ELSE
+				(* Go to error state! *)
+				sMessage	:= CONCAT(INT_TO_STRING(nState) , ': Data file doesnt exist, backup file exist!'); 
+				bError		:= TRUE;
+				nErrorId	:= 9901;
+				nState		:= 9000;
+				nLastState	:= nState;
+			END_IF
+		END_IF
+	ELSIF fbFileEntry.bError THEN
+		fbFileEntry(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_EnumFindFileEntry function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileEntry.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+50:
+	(* Create Folder according to file path!*)
+	fbCreateFolder(
+		sNetId		:= '', 
+		sPathName	:= sFilePath, 
+		ePath		:= PATH_GENERIC, 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S );
+		
+	IF NOT fbCreateFolder.bError AND NOT fbCreateFolder.bBusy THEN
+		fbCreateFolder(bExecute := FALSE);
+		nState		:= 50;
+		nLastState	:= nState;
+	ELSIF fbCreateFolder.bError THEN
+		fbCreateFolder(bExecute := FALSE);
+		IF fbCreateFolder.nErrId = 16#070C OR fbCreateFolder.nErrId = 16#0723 THEN
+			(* Folder already exists *)
+			nState		:= 60;
+			nLastState	:= nState;
+		ELSE
+			bError		:= TRUE;
+			sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_CreateDir function block error!');
+			nErrorId	:= fbCreateFolder.nErrId;
+			nState		:= 9000;
+		END_IF
+	END_IF
+	
+60:
+	(* File create for the first time!*)
+	sFileCreateTime	:= sActualDateTime;
+	sFileWriteTime	:= sActualDateTime;
+	nFileDataSize	:= nLenData;
+	nFileWriteCount	:= 1;
+	
+	bDataFileCreated	:= TRUE;
+	bCreateBackup		:= TRUE;
+	
+	nState		:= 310;
+	nLastState	:= nState;
+	
+	
+100:
+	(* If active file exist, read from file!*)
+	fbFileReadWrite(
+		sFilePath	:= CONCAT(sFilePath , CONCAT('TcPlcData' , sFileExtension)),
+		bRead		:= TRUE, 
+		pAdrrData	:= ADR(arrDataActual), 
+		nLenData	:= SIZEOF(arrDataActual) );
+		
+	IF fbFileReadWrite.bDone THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		tFileProcessTime	:= fbFileReadWrite.tLastProcessTime;
+		nState		:= 200;
+		nLastState	:= nState;
+	ELSIF fbFileReadWrite.bError THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bError		:= TRUE;
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileReadWrite function block error!');
+		nErrorId	:= fbFileReadWrite.nErrorId;
+		nState		:= 9000;
+	END_IF
+	
+110:
+	(* If backup file exist, read from file!*)
+	fbFileReadWrite(
+		sFilePath	:= CONCAT(sFilePath , CONCAT('TcPlcDataBackup' , sFileExtension)),
+		bRead		:= TRUE, 
+		pAdrrData	:= ADR(arrDataActual), 
+		nLenData	:= SIZEOF(arrDataActual) );
+		
+	IF fbFileReadWrite.bDone THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		tFileProcessTime	:= fbFileReadWrite.tLastProcessTime;
+		bBackupLoaded	:= TRUE;
+		bDataFromBackup	:= TRUE;
+		nState		:= 200;
+		nLastState	:= nState;
+	ELSIF fbFileReadWrite.bError THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bError		:= TRUE;
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileReadWrite function block error!');
+		nErrorId	:= fbFileReadWrite.nErrorId;
+		nState		:= 9000;
+	END_IF
+	
+	
+200:
+	(* Check if the Lenght of Actual data is less/equal than the cnMaxDataSize *)
+	IF nLenData < (cnMaxDataSize - cnDiagDataSize) THEN
+		(* Dont check last 4 bytes for CRC, accept file format is true always! *)
+		IF bDontCheckCRC THEN
+			MEMCPY(pAdrrData, ADR(arrDataActual), nLenData);
+			sFileCreateTime	:= sActualDateTime;
+			sFileWriteTime	:= sActualDateTime;
+			nFileDataSize	:= nLenData;
+			nFileWriteCount	:= nFileWriteCount + 1;
+			bCreateBackup	:= TRUE;
+			nState		:= 310;
+			nLastState	:= nState;
+		(* Check last 4 bytes for CRC, detect if the file correct or not? *)
+		ELSE
+			IF arrDataActual[cnMaxDataSize-3] = cnCrcCheckNo[1] AND 
+			arrDataActual[cnMaxDataSize-2] = cnCrcCheckNo[2] AND
+			arrDataActual[cnMaxDataSize-1] = cnCrcCheckNo[3] AND
+			arrDataActual[cnMaxDataSize-0] = cnCrcCheckNo[4] THEN
+				(* Get diag info from the file *)
+				pDataAddr	:= ADR(arrDataActual) + (cnMaxDataSize - cnDiagDataSize);
+				MEMCPY(ADR(sFileCreateTime), pDataAddr, SIZEOF(sFileCreateTime));
+				MEMCPY(ADR(sFileWriteTime), pDataAddr + 24, SIZEOF(sFileWriteTime));
+				MEMCPY(ADR(nFileDataSize), pDataAddr + 48, SIZEOF(nFileDataSize));
+				IF NOT (bDefaultLoaded OR bBackupLoaded) THEN
+					MEMCPY(ADR(nFileWriteCount), pDataAddr + 52, SIZEOF(nFileWriteCount));
+				END_IF
+				
+				(* Copy byte array to data structure *)
+				MEMCPY(pAdrrData, ADR(arrDataActual), nLenData);
+				
+				(* Check last written file size and actual file size? *)
+				IF nFileDataSize = nLenData THEN
+					IF bDefaultLoaded OR bBackupLoaded THEN
+						sFileWriteTime	:= sActualDateTime;
+						nFileDataSize	:= nLenData;
+						nFileWriteCount	:= nFileWriteCount + 1;
+						bCreateBackup	:= TRUE;
+						nState		:= 310;
+						nLastState	:= nState;
+					ELSE
+						(* Write only backup file! *)
+						nState		:= 330;
+						nLastState	:= nState;
+					END_IF
+				ELSE
+					(* Data size changed so write active file and then create backup file! *)
+					sFileWriteTime	:= sActualDateTime;
+					nFileDataSize	:= nLenData;
+					nFileWriteCount	:= nFileWriteCount + 1;
+					bCreateBackup	:= TRUE;
+					nState		:= 310;
+					nLastState	:= nState;
+				END_IF
+			ELSE
+				(* Read data has CRC error, check data content *)
+				sMessage	:= CONCAT(INT_TO_STRING(nState) , ': File CRC error; Check last 4 bytes!');
+				bError		:= TRUE;
+				nErrorId	:= 9910;
+				nState		:= 9000;
+			END_IF
+		END_IF
+	ELSE
+		(* File size is bigger than maximum data size!*)
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': File size bigger than maximum data size!');
+		bError		:= TRUE;
+		nErrorId	:= 9920;
+		nState		:= 9000;
+	END_IF
+	
+300:
+	(* Check the data lenght*)
+	nRemainDataSize	:= UDINT_TO_DINT((cnMaxDataSize - cnDiagDataSize) - nLenData);
+	
+	IF nLenData < (cnMaxDataSize - cnDiagDataSize) THEN
+		(* Check if the data lenght is same? *)
+		IF (nLenData = nFileDataSize) AND (nLastMaxDataSize = cnMaxDataSize)  THEN
+			(* Compare the data if it is changed?*)
+			nCompareResult	:= MEMCMP(ADR(arrDataActual) , pAdrrData , nLenData);
+		ELSE
+			(* Data size changed, so need to write file! *)
+			nLastMaxDataSize:= cnMaxDataSize;
+			sFileWriteTime	:= sActualDateTime;
+			nFileDataSize	:= nLenData;
+			nFileWriteCount	:= nFileWriteCount + 1;
+			bDataUnsaved	:= FALSE;
+			bStartDelay		:= FALSE;
+			bBusy			:= TRUE;
+			nState			:= 310;
+			nLastState		:= nState;
+		END_IF
+		
+		(* If changed wait for tWaitTime to save file!*)
+		IF nCompareResult <> 0 THEN
+			(* Copy data structure to byte array *)
+			MEMCPY(ADR(arrDataActual), pAdrrData, nLenData);
+			bDataUnsaved	:= TRUE;
+			bStartDelay		:= FALSE;
+		ELSE
+			IF bDataUnsaved THEN
+				bStartDelay	:= TRUE;
+			END_IF
+		END_IF
+		
+		(* Data not saved, from the last change *)
+		IF bDataUnsaved THEN
+			(*Wait for tWaitTime to save!*)
+			fbWaitTimer(IN:= bStartDelay, PT:= tWaitTime);
+			(*Save data!*)
+			IF fbWaitTimer.Q THEN
+				fbWaitTimeout(IN:= FALSE);
+				fbWaitTimer(IN:= FALSE);
+				sFileWriteTime	:= sActualDateTime;
+				nFileDataSize	:= nLenData;
+				nFileWriteCount	:= nFileWriteCount + 1;
+				bDataUnsaved	:= FALSE;
+				bStartDelay		:= FALSE;
+				bBusy			:= TRUE;
+				nState			:= 310;
+				nLastState		:= nState;
+			END_IF
+		END_IF
+		
+		(* Check if data changes too frequently in a specified time. 
+			Becasue this is based on file-typed data saving, data must be saved less frequent 
+			to be sure hdd have longer life. *)
+		fbWaitTimeout(IN:= bDataUnsaved, PT:= tTimeoutTime);
+		IF fbWaitTimeout.Q THEN
+			sMessage	:= CONCAT(INT_TO_STRING(nState) , ': Data changes too many times! Check you data!');
+			bError		:= TRUE;
+			nErrorId	:= 9940;
+			nState		:= 9000;
+		END_IF
+	ELSE
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': Data size error!');
+		bError		:= TRUE;
+		nErrorId	:= 9950;
+		nState		:= 9000;
+	END_IF
+	
+310:
+	(* Last 60 bytes for diagnostics 
+		24 bytes- File creation date,
+		24 bytes- File last write date,
+		 4 bytes- Write count,
+		 4 bytes- File data size,
+		 4 bytes- CRC*)
+	pDataAddr		:= ADR(arrDataActual) + (cnMaxDataSize - cnDiagDataSize);
+	
+	MEMCPY(pDataAddr, ADR(sFileCreateTime) , SIZEOF(sFileCreateTime));
+	MEMCPY(pDataAddr + 24, ADR(sFileWriteTime) , SIZEOF(sFileWriteTime));
+	MEMCPY(pDataAddr + 48, ADR(nFileDataSize) , SIZEOF(nFileDataSize));
+	MEMCPY(pDataAddr + 52, ADR(nFileWriteCount) , SIZEOF(nFileWriteCount));
+	MEMCPY(pDataAddr + 56, ADR(cnCrcCheckNo) , SIZEOF(cnCrcCheckNo));
+	
+	bBackupLoaded	:= FALSE;
+	bDefaultLoaded	:= FALSE;
+	
+	nState		:= 320;
+	nLastState	:= nState;
+
+320:
+	(* Write to active file TcPlcData.dat *)
+	fbFileReadWrite(
+		sFilePath	:= CONCAT(sFilePath , CONCAT('TcPlcData' , sFileExtension)),
+		bWrite		:= TRUE, 
+		pAdrrData	:= ADR(arrDataActual), 
+		nLenData	:= SIZEOF(arrDataActual) );
+		
+	IF fbFileReadWrite.bDone THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		tFileProcessTime	:= fbFileReadWrite.tLastProcessTime;
+		IF bCreateBackup THEN
+			nState		:= 330;
+			nLastState	:= nState;
+		ELSE
+			nState		:= 340;
+			nLastState	:= nState;
+		END_IF
+	ELSIF fbFileReadWrite.bError THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bError		:= TRUE;
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileReadWrite function block error!');
+		nErrorId	:= fbFileReadWrite.nErrorId;
+		nState		:= 9000;
+	END_IF
+	
+330:
+	(* Write to backup file TcPlcDataBackup.dat *)
+	bCreateBackup	:= FALSE;
+	
+	fbFileReadWrite(
+		sFilePath	:= CONCAT(sFilePath , CONCAT('TcPlcDataBackup' , sFileExtension)),
+		bWrite		:= TRUE, 
+		pAdrrData	:= ADR(arrDataActual), 
+		nLenData	:= SIZEOF(arrDataActual) );
+		
+	IF fbFileReadWrite.bDone THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		nState		:= 340;
+		nLastState	:= nState;
+	ELSIF fbFileReadWrite.bError THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bError		:= TRUE;
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileReadWrite function block error!');
+		nErrorId	:= fbFileReadWrite.nErrorId;
+		nState		:= 9000;
+	END_IF
+	
+340:
+	fbWaitTimer(IN:= TRUE, PT:= T#200MS);
+	IF fbWaitTimer.Q THEN
+		fbWaitTimer(IN:= FALSE);
+		bDataInitOk	:= TRUE;
+		bBusy		:= FALSE;
+		bError		:= FALSE;
+		nErrorID	:= 0;
+		nState		:= 300;
+		nLastState	:= nState;
+	END_IF
+	
+1000:
+	(* Check if the backup file is exist or not!
+		If file is not exist then create folder and the file first!*)
+	fbFileEntry(
+		sNetId		:= '', 
+		sPathName	:= CONCAT(sFilePath , CONCAT('TcPlcDataBackup' , sFileExtension)), 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S);
+		
+	IF NOT fbFileEntry.bError AND NOT fbFileEntry.bBusy THEN
+		fbFileEntry(bExecute := FALSE);
+		stFileInfo	:= fbFileEntry.stFindFile;
+		IF stFileInfo.sFileName <> '' THEN
+			(* File is exist!*)
+			nState		:= 1010;
+			nLastState	:= nState;
+		ELSE
+			(* File is not exist!*)
+			sMessage	:= CONCAT(INT_TO_STRING(nState) , ': Backup file doesnt exist!');
+			bError		:= TRUE;
+			nErrorId	:= 9902;
+			nState		:= 9000;
+			nLastState	:= nState;
+		END_IF
+	ELSIF fbFileEntry.bError THEN
+		fbFileEntry(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_EnumFindFileEntry function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileEntry.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+1010:
+	fbFileReadWrite(
+		sFilePath	:= CONCAT(sFilePath , CONCAT('TcPlcDataBackup' , sFileExtension)),
+		bRead		:= TRUE, 
+		pAdrrData	:= ADR(arrDataActual), 
+		nLenData	:= SIZEOF(arrDataActual) );
+		
+	IF fbFileReadWrite.bDone THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bBackupLoaded	:= TRUE;
+		bDefaultLoaded	:= FALSE;
+		bBusy		:= FALSE;
+		nState		:= 200;
+		nLastState	:= nState;
+	ELSIF fbFileReadWrite.bError THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bError		:= TRUE;
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileReadWrite function block error!');
+		nErrorId	:= fbFileReadWrite.nErrorId;
+		nState		:= 9000;
+	END_IF
+	
+1100:
+	(* Check if the backup file is exist or not!
+		If file is not exist then create folder and the file first!*)
+	fbFileEntry(
+		sNetId		:= '', 
+		sPathName	:= CONCAT(sFilePath , CONCAT('TcPlcDataDefault' , sFileExtension)), 
+		bExecute	:= TRUE, 
+		tTimeout	:= T#2S);
+		
+	IF NOT fbFileEntry.bError AND NOT fbFileEntry.bBusy THEN
+		fbFileEntry(bExecute := FALSE);
+		stFileInfo	:= fbFileEntry.stFindFile;
+		IF stFileInfo.sFileName <> '' THEN
+			(* File is exist!*)
+			nState		:= 1110;
+			nLastState	:= nState;
+		ELSE
+			(* File is not exist!*)
+			sMessage	:= CONCAT(INT_TO_STRING(nState) , ': Backup file doesnt exist!');
+			bError		:= TRUE;
+			nErrorId	:= 9902;
+			nState		:= 9000;
+			nLastState	:= nState;
+		END_IF
+	ELSIF fbFileEntry.bError THEN
+		fbFileEntry(bExecute := FALSE);
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_EnumFindFileEntry function block error!');
+		bError		:= TRUE;
+		nErrorId	:= fbFileEntry.nErrId;
+		nState		:= 9000;
+	END_IF
+	
+1110:
+	fbFileReadWrite(
+		sFilePath	:= CONCAT(sFilePath , CONCAT('TcPlcDataDefault' , sFileExtension)),
+		bRead		:= TRUE, 
+		pAdrrData	:= ADR(arrDataActual), 
+		nLenData	:= SIZEOF(arrDataActual) );
+		
+	IF fbFileReadWrite.bDone THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bBackupLoaded	:= FALSE;
+		bDefaultLoaded	:= TRUE;
+		bBusy		:= FALSE;
+		nState		:= 200;
+		nLastState	:= nState;
+	ELSIF fbFileReadWrite.bError THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bError		:= TRUE;
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileReadWrite function block error!');
+		nErrorId	:= fbFileReadWrite.nErrorId;
+		nState		:= 9000;
+	END_IF
+
+1200:
+	fbFileReadWrite(
+		sFilePath	:= CONCAT(sFilePath , CONCAT('TcPlcDataDefault' , sFileExtension)),
+		bWrite		:= TRUE, 
+		pAdrrData	:= ADR(arrDataActual), 
+		nLenData	:= SIZEOF(arrDataActual) );
+		
+	IF fbFileReadWrite.bDone THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bBusy		:= FALSE;
+		nState		:= 300;
+		nLastState	:= nState;
+	ELSIF fbFileReadWrite.bError THEN
+		fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+		bError		:= TRUE;
+		sMessage	:= CONCAT(INT_TO_STRING(nState) , ': FB_FileReadWrite function block error!');
+		nErrorId	:= fbFileReadWrite.nErrorId;
+		nState		:= 9000;
+	END_IF
+	
+9000:
+	fbFileReadWrite( bRead := FALSE, bWrite := FALSE);
+	fbFileEntry(bExecute := FALSE);
+	fbWaitTimeout(IN:= FALSE);
+	fbWaitTimer(IN:= FALSE);
+	bBusy			:= FALSE;
+	bDataInitOk		:= FALSE;
+	bDataUnsaved	:= FALSE;
+	bStartDelay		:= FALSE;
+	bBackupLoaded	:= FALSE;
+	bDefaultLoaded	:= FALSE;
+
+END_CASE
+(***************** ================================== *****************)]]></ST>
+    </Implementation>
+    <LineIds Name="FB_PersistentData">
+      <LineId Id="1167" Count="0" />
+      <LineId Id="303" Count="0" />
+      <LineId Id="267" Count="0" />
+      <LineId Id="1169" Count="0" />
+      <LineId Id="1168" Count="0" />
+      <LineId Id="265" Count="0" />
+      <LineId Id="258" Count="0" />
+      <LineId Id="269" Count="0" />
+      <LineId Id="1170" Count="0" />
+      <LineId Id="1083" Count="5" />
+      <LineId Id="1173" Count="4" />
+      <LineId Id="1172" Count="0" />
+      <LineId Id="1171" Count="0" />
+      <LineId Id="1089" Count="5" />
+      <LineId Id="1162" Count="0" />
+      <LineId Id="1095" Count="0" />
+      <LineId Id="1097" Count="3" />
+      <LineId Id="1149" Count="1" />
+      <LineId Id="1163" Count="0" />
+      <LineId Id="1101" Count="5" />
+      <LineId Id="1152" Count="1" />
+      <LineId Id="1164" Count="0" />
+      <LineId Id="1107" Count="5" />
+      <LineId Id="1154" Count="1" />
+      <LineId Id="1165" Count="0" />
+      <LineId Id="1113" Count="2" />
+      <LineId Id="1082" Count="0" />
+      <LineId Id="1182" Count="0" />
+      <LineId Id="1181" Count="0" />
+      <LineId Id="1180" Count="0" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="52" Count="0" />
+      <LineId Id="49" Count="0" />
+      <LineId Id="730" Count="0" />
+      <LineId Id="923" Count="0" />
+      <LineId Id="1307" Count="0" />
+      <LineId Id="731" Count="0" />
+      <LineId Id="729" Count="0" />
+      <LineId Id="54" Count="1" />
+      <LineId Id="1386" Count="0" />
+      <LineId Id="64" Count="0" />
+      <LineId Id="1380" Count="0" />
+      <LineId Id="61" Count="1" />
+      <LineId Id="66" Count="0" />
+      <LineId Id="305" Count="0" />
+      <LineId Id="309" Count="0" />
+      <LineId Id="304" Count="0" />
+      <LineId Id="67" Count="0" />
+      <LineId Id="306" Count="1" />
+      <LineId Id="573" Count="0" />
+      <LineId Id="1381" Count="1" />
+      <LineId Id="574" Count="0" />
+      <LineId Id="68" Count="0" />
+      <LineId Id="70" Count="2" />
+      <LineId Id="1408" Count="0" />
+      <LineId Id="73" Count="2" />
+      <LineId Id="69" Count="0" />
+      <LineId Id="1190" Count="1" />
+      <LineId Id="1308" Count="0" />
+      <LineId Id="1192" Count="0" />
+      <LineId Id="1194" Count="0" />
+      <LineId Id="1193" Count="0" />
+      <LineId Id="1195" Count="1" />
+      <LineId Id="1199" Count="0" />
+      <LineId Id="1201" Count="2" />
+      <LineId Id="1200" Count="0" />
+      <LineId Id="1197" Count="0" />
+      <LineId Id="1309" Count="0" />
+      <LineId Id="1312" Count="2" />
+      <LineId Id="1310" Count="1" />
+      <LineId Id="76" Count="0" />
+      <LineId Id="78" Count="6" />
+      <LineId Id="1551" Count="0" />
+      <LineId Id="85" Count="0" />
+      <LineId Id="1552" Count="2" />
+      <LineId Id="86" Count="2" />
+      <LineId Id="1555" Count="0" />
+      <LineId Id="89" Count="0" />
+      <LineId Id="1556" Count="0" />
+      <LineId Id="1558" Count="0" />
+      <LineId Id="1557" Count="0" />
+      <LineId Id="90" Count="15" />
+      <LineId Id="77" Count="0" />
+      <LineId Id="1480" Count="0" />
+      <LineId Id="108" Count="1" />
+      <LineId Id="111" Count="11" />
+      <LineId Id="1117" Count="1" />
+      <LineId Id="1116" Count="0" />
+      <LineId Id="126" Count="0" />
+      <LineId Id="1119" Count="1" />
+      <LineId Id="129" Count="7" />
+      <LineId Id="110" Count="0" />
+      <LineId Id="139" Count="1" />
+      <LineId Id="142" Count="11" />
+      <LineId Id="1135" Count="1" />
+      <LineId Id="175" Count="0" />
+      <LineId Id="160" Count="0" />
+      <LineId Id="1124" Count="5" />
+      <LineId Id="1137" Count="0" />
+      <LineId Id="1130" Count="4" />
+      <LineId Id="1123" Count="0" />
+      <LineId Id="164" Count="6" />
+      <LineId Id="141" Count="0" />
+      <LineId Id="178" Count="1" />
+      <LineId Id="181" Count="14" />
+      <LineId Id="1138" Count="0" />
+      <LineId Id="196" Count="7" />
+      <LineId Id="180" Count="0" />
+      <LineId Id="205" Count="0" />
+      <LineId Id="204" Count="0" />
+      <LineId Id="475" Count="0" />
+      <LineId Id="462" Count="2" />
+      <LineId Id="298" Count="0" />
+      <LineId Id="1387" Count="1" />
+      <LineId Id="299" Count="0" />
+      <LineId Id="542" Count="0" />
+      <LineId Id="300" Count="1" />
+      <LineId Id="478" Count="0" />
+      <LineId Id="476" Count="1" />
+      <LineId Id="333" Count="0" />
+      <LineId Id="481" Count="7" />
+      <LineId Id="1403" Count="0" />
+      <LineId Id="489" Count="7" />
+      <LineId Id="479" Count="0" />
+      <LineId Id="497" Count="1" />
+      <LineId Id="703" Count="8" />
+      <LineId Id="1402" Count="0" />
+      <LineId Id="753" Count="0" />
+      <LineId Id="1383" Count="0" />
+      <LineId Id="712" Count="7" />
+      <LineId Id="702" Count="0" />
+      <LineId Id="1139" Count="0" />
+      <LineId Id="625" Count="1" />
+      <LineId Id="628" Count="1" />
+      <LineId Id="1394" Count="0" />
+      <LineId Id="630" Count="0" />
+      <LineId Id="1211" Count="0" />
+      <LineId Id="1213" Count="0" />
+      <LineId Id="631" Count="5" />
+      <LineId Id="1395" Count="0" />
+      <LineId Id="637" Count="9" />
+      <LineId Id="1229" Count="0" />
+      <LineId Id="647" Count="0" />
+      <LineId Id="1230" Count="0" />
+      <LineId Id="1396" Count="0" />
+      <LineId Id="648" Count="1" />
+      <LineId Id="761" Count="0" />
+      <LineId Id="1397" Count="0" />
+      <LineId Id="755" Count="0" />
+      <LineId Id="1214" Count="0" />
+      <LineId Id="1227" Count="1" />
+      <LineId Id="1226" Count="0" />
+      <LineId Id="1225" Count="0" />
+      <LineId Id="1215" Count="0" />
+      <LineId Id="1221" Count="0" />
+      <LineId Id="1217" Count="0" />
+      <LineId Id="1220" Count="0" />
+      <LineId Id="1218" Count="1" />
+      <LineId Id="1216" Count="0" />
+      <LineId Id="654" Count="0" />
+      <LineId Id="1141" Count="0" />
+      <LineId Id="765" Count="2" />
+      <LineId Id="655" Count="4" />
+      <LineId Id="1142" Count="0" />
+      <LineId Id="660" Count="6" />
+      <LineId Id="1143" Count="0" />
+      <LineId Id="667" Count="3" />
+      <LineId Id="627" Count="0" />
+      <LineId Id="334" Count="1" />
+      <LineId Id="353" Count="5" />
+      <LineId Id="466" Count="0" />
+      <LineId Id="359" Count="1" />
+      <LineId Id="1393" Count="0" />
+      <LineId Id="1409" Count="0" />
+      <LineId Id="468" Count="1" />
+      <LineId Id="467" Count="0" />
+      <LineId Id="1405" Count="1" />
+      <LineId Id="1404" Count="0" />
+      <LineId Id="362" Count="3" />
+      <LineId Id="1398" Count="0" />
+      <LineId Id="366" Count="9" />
+      <LineId Id="1296" Count="0" />
+      <LineId Id="1392" Count="0" />
+      <LineId Id="377" Count="2" />
+      <LineId Id="474" Count="0" />
+      <LineId Id="380" Count="0" />
+      <LineId Id="1305" Count="0" />
+      <LineId Id="473" Count="0" />
+      <LineId Id="471" Count="1" />
+      <LineId Id="470" Count="0" />
+      <LineId Id="382" Count="6" />
+      <LineId Id="1297" Count="0" />
+      <LineId Id="1389" Count="2" />
+      <LineId Id="1298" Count="1" />
+      <LineId Id="1302" Count="2" />
+      <LineId Id="1300" Count="1" />
+      <LineId Id="408" Count="4" />
+      <LineId Id="352" Count="0" />
+      <LineId Id="247" Count="0" />
+      <LineId Id="302" Count="0" />
+      <LineId Id="443" Count="6" />
+      <LineId Id="454" Count="6" />
+      <LineId Id="1222" Count="0" />
+      <LineId Id="1224" Count="0" />
+      <LineId Id="1223" Count="0" />
+      <LineId Id="461" Count="0" />
+      <LineId Id="442" Count="0" />
+      <LineId Id="465" Count="0" />
+      <LineId Id="441" Count="0" />
+      <LineId Id="331" Count="0" />
+      <LineId Id="221" Count="1" />
+      <LineId Id="224" Count="2" />
+      <LineId Id="232" Count="2" />
+      <LineId Id="1401" Count="0" />
+      <LineId Id="532" Count="0" />
+      <LineId Id="310" Count="1" />
+      <LineId Id="534" Count="1" />
+      <LineId Id="537" Count="0" />
+      <LineId Id="536" Count="0" />
+      <LineId Id="236" Count="1" />
+      <LineId Id="239" Count="2" />
+      <LineId Id="238" Count="0" />
+      <LineId Id="235" Count="0" />
+      <LineId Id="312" Count="1" />
+      <LineId Id="332" Count="0" />
+      <LineId Id="540" Count="1" />
+      <LineId Id="315" Count="15" />
+      <LineId Id="314" Count="0" />
+      <LineId Id="338" Count="1" />
+      <LineId Id="341" Count="2" />
+      <LineId Id="1206" Count="0" />
+      <LineId Id="346" Count="4" />
+      <LineId Id="340" Count="0" />
+      <LineId Id="835" Count="1" />
+      <LineId Id="891" Count="28" />
+      <LineId Id="862" Count="0" />
+      <LineId Id="920" Count="1" />
+      <LineId Id="843" Count="8" />
+      <LineId Id="1144" Count="0" />
+      <LineId Id="1161" Count="0" />
+      <LineId Id="852" Count="7" />
+      <LineId Id="838" Count="0" />
+      <LineId Id="860" Count="0" />
+      <LineId Id="837" Count="0" />
+      <LineId Id="925" Count="40" />
+      <LineId Id="1145" Count="0" />
+      <LineId Id="1160" Count="0" />
+      <LineId Id="966" Count="7" />
+      <LineId Id="924" Count="0" />
+      <LineId Id="840" Count="0" />
+      <LineId Id="839" Count="0" />
+      <LineId Id="1037" Count="7" />
+      <LineId Id="1147" Count="0" />
+      <LineId Id="1046" Count="7" />
+      <LineId Id="841" Count="0" />
+      <LineId Id="586" Count="1" />
+      <LineId Id="590" Count="0" />
+      <LineId Id="922" Count="0" />
+      <LineId Id="1306" Count="0" />
+      <LineId Id="589" Count="0" />
+      <LineId Id="759" Count="0" />
+      <LineId Id="592" Count="2" />
+      <LineId Id="591" Count="0" />
+      <LineId Id="976" Count="0" />
+      <LineId Id="810" Count="0" />
+      <LineId Id="50" Count="0" />
+      <LineId Id="1184" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

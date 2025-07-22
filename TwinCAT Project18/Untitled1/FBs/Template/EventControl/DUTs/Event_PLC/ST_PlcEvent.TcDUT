@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <DUT Name="ST_PlcEvent" Id="{f815c3ca-9efd-4dcd-97ca-b9d214cc1eb7}">
+    <Declaration><![CDATA[TYPE ST_PlcEvent :
+STRUCT
+
+	stEventsDef		:ARRAY[1..nPlcEventsNumber] OF ST_PlcEventDef;
+	stEventsVisu	:ARRAY[1..nPlcEventsNumber] OF ST_PlcEventHmi;
+
+	nFrameColor		:UDINT 	:= 16#32000000 ;				(* *)
+	nAlarmColor		:UDINT	:=16#FFC3C0C4;		
+	nWarningColor	:UDINT	:= 13351576;
+	nTextColor		:UDINT;
+
+	
+	nTableSelX		:INT;
+	nTableSelY		:INT;
+
+	bAckEvent		:BOOL;
+	bClearEventTable:BOOL;
+
+	bAlarm			:BOOL;
+	bWarning		:BOOL;
+
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,455 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.12">
+  <POU Name="Prg_EventControl" Id="{6e566f29-8da4-4587-ad38-c5039460b2ab}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM Prg_EventControl
+VAR
+(*System Time **********************************************************************************************************)
+	fbLocalSystemTime : FB_LocalSystemTime := ( bEnable := TRUE, dwCycle := 1 );
+	fbGetTime:NT_GetTime;
+	stWindowsTime: Tc2_Utilities.TIMESTRUCT;
+	sEventTime: STRING;
+	bGetLocalTime: BOOL;
+(*System Time **********************************************************************************************************)
+
+(*PLC Event Control *****************************************************************************************************)
+	Re_PlcEventSignal: ARRAY[1..nPlcEventsNumber] OF R_TRIG;
+	bIniPlcEventTableColor: BOOL;
+	i_iniPlcEveTableColor: INT;
+	i_ClearPlcEventTable: INT;
+	i_PlcEveScan: INT;
+	i_PlcEveShift: INT;
+	i_PlcEventScan: INT;
+	cnt_ActivePlcAlarm: INT;
+	cnt_ActivePlcWarning: INT;
+	nActivePlcAlarmNumber: INT;
+	nActivePlcWarningNumber: INT;
+	Re_AckPlcEvent: R_TRIG;
+	nAckedPlcEvendID: UDINT;
+	bPlcEventTableCleared: BOOL;
+(*PLC Event Control *****************************************************************************************************)
+	
+
+
+	fbGetTimeTrigger: TON;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+	;
+
+(*Actions ************************************************************************************************************************************************************************)
+	Act_01_PlcEventDef();
+
+
+(*System Time *****************************************************************************************************************************************************************)	
+(****)
+	fbGetTimeTrigger(IN:=NOT(fbGetTimeTrigger.Q) , PT:=T#100MS , Q=> , ET=> );
+	fbGetTime(
+		NETID	:= '', 
+		START	:= fbGetTimeTrigger.Q, 
+		TMOUT	:= , 
+		BUSY	=> , 
+		ERR		=> , 
+		ERRID	=> , 
+		TIMESTR	=> );
+
+(****)
+	sYear	:=WORD_TO_STRING(fbGetTime.TIMESTR.wYear);
+	sMonth	:=WORD_TO_STRING(fbGetTime.TIMESTR.wMonth);
+	sDay	:=WORD_TO_STRING(fbGetTime.TIMESTR.wDay);
+	sHour	:=WORD_TO_STRING(fbGetTime.TIMESTR.wHour);
+	sMin	:=WORD_TO_STRING(fbGetTime.TIMESTR.wMinute);
+	sSec	:=WORD_TO_STRING(fbGetTime.TIMESTR.wSecond);
+	
+
+	sDate		:=CONCAT(sYear,CONCAT('.',CONCAT(sMonth,CONCAT('.',sDay))) );
+	sTime		:=CONCAT(sHour,CONCAT(':',CONCAT(sMin,CONCAT(':',sSec))) );
+	sDateTime	:=CONCAT(sDate,CONCAT(' - ',sTime));
+
+	CASE stEvents.ctrl.nTimeFormat OF
+		0:(*TIME*)
+			sEventTime:=sTime;
+
+		1:(*DATE&TIME*)
+			sEventTime:=sDateTime;
+
+		2:(*DATE*)
+			sEventTime:=sDate;
+	END_CASE
+
+
+(*PLC Event Control ***********************************************************************************************************************************************************)
+
+	(*Event Table Ini ***)
+		IF NOT(bIniPlcEventTableColor) THEN
+			FOR i_iniPlcEveTableColor:=1 TO nPlcEventsNumber BY 1 DO
+				stEvents.Plc.stEventsVisu[i_iniPlcEveTableColor].nTextColor:=0;
+				stEvents.Plc.stEventsVisu[i_iniPlcEveTableColor].nEventColor:=16#FFFFFF;
+				stEvents.Plc.stEventsDef[i_iniPlcEveTableColor].nEventID:=i_iniPlcEveTableColor;
+			END_FOR
+			bIniPlcEventTableColor:=TRUE;
+		END_IF
+
+	(*Table Selection Check ***)
+		IF stEvents.Plc.nTableSelY<1 THEN
+			stEvents.Plc.nTableSelY:=1;
+		ELSIF stEvents.Plc.nTableSelY>nPlcEventsNumber THEN
+			stEvents.Plc.nTableSelY:=nPlcEventsNumber;
+		END_IF
+
+		IF stEvents.Plc.nTableSelX<0 THEN
+			stEvents.Plc.nTableSelX:=0;
+		ELSIF stEvents.Plc.nTableSelX>3 THEN
+			stEvents.Plc.nTableSelX:=3;
+		END_IF
+
+
+	
+	IF stEvents.ctrl.bPlcEvents THEN
+
+		bPlcEventTableCleared:=FALSE;
+
+		(*Clear Table ***)
+			IF stEvents.Plc.bClearEventTable OR i_ClearPlcEventTable<>0 THEN
+	
+				i_ClearPlcEventTable:=(i_ClearPlcEventTable+1);
+
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].nTextColor:=0;
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].nEventColor:=16#FFFFFF;
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].nEventID:=0;
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].nEventType:=0;
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].sEventAckTime:='';
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].sEventTime:='';
+	
+				Re_PlcEventSignal[i_ClearPlcEventTable](CLK:=FALSE , Q=> );
+		
+				IF i_ClearPlcEventTable>=nPlcEventsNumber THEN
+					i_ClearPlcEventTable:=0;
+					i_PlcEventScan:=0;
+				END_IF
+	
+			END_IF
+	
+	
+		(*Plc Event  Execution*)
+			IF i_ClearPlcEventTable=0 THEN
+
+
+				(*Plc Event  Scan*)
+				i_PlcEventScan:=i_PlcEventScan+1;
+	
+				Re_PlcEventSignal[i_PlcEventScan](CLK:=stEvents.Plc.stEventsDef[i_PlcEventScan].bEventSignal , Q=> );
+	
+				IF Re_PlcEventSignal[i_PlcEventScan].Q THEN
+	
+					(*Event Shift*)
+					FOR i_PlcEveShift:=nPlcEventsNumber TO 2 BY (-1) DO
+						stEvents.Plc.stEventsVisu[i_PlcEveShift]:=stEvents.Plc.stEventsVisu[i_PlcEveShift-1];
+					END_FOR
+	
+					(*Plc Event Rec*)
+					stEvents.Plc.stEventsVisu[1].nEventID:=stEvents.Plc.stEventsDef[i_PlcEventScan].nEventID;
+					stEvents.Plc.stEventsVisu[1].nEventType:=stEvents.Plc.stEventsDef[i_PlcEventScan].nEventType;
+	
+					stEvents.Plc.stEventsVisu[1].sEventAckTime:='';
+					stEvents.Plc.stEventsVisu[1].sEventTime:=sEventTime;
+					stEvents.Plc.stEventsVisu[1].nTextColor:=stEvents.Plc.nTextColor;
+					IF stEvents.Plc.stEventsVisu[1].nEventType=1 THEN
+						stEvents.Plc.stEventsVisu[1].nEventColor:=stEvents.Plc.nAlarmColor;
+					ELSE
+						stEvents.Plc.stEventsVisu[1].nEventColor:=stEvents.Plc.nWarningColor;
+					END_IF
+	
+				END_IF
+
+	
+				(*Alarm & Warning scan*)
+				IF stEvents.Plc.stEventsDef[i_PlcEventScan].bEventSignal THEN
+					IF stEvents.Plc.stEventsDef[i_PlcEventScan].nEventType=1 THEN
+						cnt_ActivePlcAlarm:=(cnt_ActivePlcAlarm+1);
+					ELSE
+						cnt_ActivePlcWarning:=(cnt_ActivePlcWarning+1);
+					END_IF
+				END_IF
+	
+	
+				(*Acknowledge of Event*)
+				Re_AckPlcEvent(CLK:=stEvents.Plc.bAckEvent  , Q=> );
+	
+				IF Re_AckPlcEvent.Q THEN
+					nAckedPlcEvendID:= stEvents.Plc.stEventsVisu[stEvents.Plc.nTableSelY].nEventID;
+					IF (nAckedPlcEvendID>0) AND (nAckedPlcEvendID<=nPlcEventsNumber) THEN
+						stEvents.Plc.stEventsVisu[stEvents.Plc.nTableSelY].nTextColor;
+						stEvents.Plc.stEventsVisu[stEvents.Plc.nTableSelY].nEventColor:=16#FFFFFF;
+						stEvents.Plc.stEventsVisu[stEvents.Plc.nTableSelY].sEventAckTime:=sEventTime;
+						Re_PlcEventSignal[nAckedPlcEvendID](CLK:=FALSE , Q=> );
+					END_IF
+				END_IF
+	
+	
+				(*Cycle End***)
+				IF i_PlcEventScan>=nPlcEventsNumber THEN
+					nActivePlcAlarmNumber:=cnt_ActivePlcAlarm;
+					nActivePlcWarningNumber:=cnt_ActivePlcWarning;
+					cnt_ActivePlcAlarm:=0;
+					cnt_ActivePlcWarning:=0;
+					i_PlcEventScan:=0;
+				END_IF
+	
+				stEvents.Plc.bAlarm:=(nActivePlcAlarmNumber<>0);
+				stEvents.Plc.bWarning:=(nActivePlcWarningNumber<>0);
+	
+	
+			END_IF
+
+
+	ELSE
+
+		(*Clear Table ***)
+			IF NOT(bPlcEventTableCleared) THEN
+				i_ClearPlcEventTable:=(i_ClearPlcEventTable+1);
+
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].nTextColor:=0;
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].nEventColor:=16#FFFFFF;
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].nEventID:=0;
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].nEventType:=0;
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].sEventAckTime:='';
+				stEvents.Plc.stEventsVisu[i_ClearPlcEventTable].sEventTime:='';
+	
+				Re_PlcEventSignal[i_ClearPlcEventTable](CLK:=FALSE , Q=> );
+		
+				IF i_ClearPlcEventTable>=nPlcEventsNumber THEN
+					i_ClearPlcEventTable:=0;
+					i_PlcEventScan:=0;
+					bPlcEventTableCleared:=TRUE;
+				END_IF
+			END_IF
+
+	END_IF
+
+(*PLC Event Control /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////*)
+
+
+
+]]></ST>
+    </Implementation>
+    <Action Name="Act_01_PlcEventDef" Id="{c4c97d7e-d658-43c5-b3fb-4a11aed0d32c}">
+      <Implementation>
+        <ST><![CDATA[
+	;
+
+(*Execution of Plc Events ********************************************************************************************************************************)
+	stEvents.ctrl.bPlcEvents	;
+
+
+(*Definitions of Plc Events *******************************************************************************************************************************)
+
+(*PLC Event - 1*)
+	stEvents.Plc.stEventsDef[1].bEventSignal	;						(* Active Alarm / Warning Variable *)
+	stEvents.Plc.stEventsDef[1].nEventType		:=1;					(* 1: ALARM , 2: WARNING *)
+
+(*PLC Event - 2*)
+	stEvents.Plc.stEventsDef[2].bEventSignal	;
+	stEvents.Plc.stEventsDef[2].nEventType		:=2;
+
+(*PLC Event - 3*)
+	stEvents.Plc.stEventsDef[3].bEventSignal	;
+	stEvents.Plc.stEventsDef[3].nEventType		:=2;
+
+(*PLC Event - 4*)
+	stEvents.Plc.stEventsDef[4].bEventSignal	;
+	stEvents.Plc.stEventsDef[4].nEventType		:= 1 ;
+
+(*PLC Event - 5*)
+	stEvents.Plc.stEventsDef[5].bEventSignal 	;  
+	stEvents.Plc.stEventsDef[5].nEventType		:=2;	
+
+(*PLC Event - 6*)
+	stEvents.Plc.stEventsDef[6].bEventSignal	;
+	stEvents.Plc.stEventsDef[6].nEventType 		:=2;
+
+(*PLC Event - 7*)
+	stEvents.Plc.stEventsDef[7].bEventSignal ;
+	stEvents.Plc.stEventsDef[7].nEventType :=2;
+
+(*PLC Event - 8*)
+	stEvents.Plc.stEventsDef[8].bEventSignal;
+	stEvents.Plc.stEventsDef[8].nEventType :=1;
+
+(*PLC Event - 9*)
+	stEvents.Plc.stEventsDef[9].bEventSignal;
+	stEvents.Plc.stEventsDef[9].nEventType :=1;
+		
+(*PLC Event - 10*)
+	stEvents.Plc.stEventsDef[10].bEventSignal;
+	stEvents.Plc.stEventsDef[10].nEventType:=1;
+
+(*PLC Event - 11*)
+	stEvents.Plc.stEventsDef[11].bEventSignal;
+	stEvents.Plc.stEventsDef[11].nEventType:=3;
+	
+(*PLC Event - 12*)
+	stEvents.Plc.stEventsDef[12].bEventSignal;
+	stEvents.Plc.stEventsDef[12].nEventType:=1;
+	
+(*PLC Event - 13*)
+	stEvents.Plc.stEventsDef[13].bEventSignal;
+	stEvents.Plc.stEventsDef[13].nEventType:=1;
+	
+(*PLC Event - 14*)
+	stEvents.Plc.stEventsDef[14].bEventSignal;
+	stEvents.Plc.stEventsDef[14].nEventType:=1;
+	
+(*PLC Event - 15*)
+	stEvents.Plc.stEventsDef[15].bEventSignal;
+	stEvents.Plc.stEventsDef[15].nEventType:=1;
+	
+(*PLC Event - 16*)
+	stEvents.Plc.stEventsDef[16].bEventSignal;
+	stEvents.Plc.stEventsDef[16].nEventType:=1;
+	
+(*PLC Event - 17*)
+	stEvents.Plc.stEventsDef[17].bEventSignal;
+	stEvents.Plc.stEventsDef[17].nEventType:=2;
+	
+(*PLC Event - 18*)
+	stEvents.Plc.stEventsDef[18].bEventSignal;
+	stEvents.Plc.stEventsDef[18].nEventType;
+	
+(*PLC Event - 19*)
+	stEvents.Plc.stEventsDef[19].bEventSignal;
+	stEvents.Plc.stEventsDef[19].nEventType;
+	
+(*PLC Event - 20*)
+	stEvents.Plc.stEventsDef[20].bEventSignal;
+	stEvents.Plc.stEventsDef[20].nEventType;
+	
+(*PLC Event - 21*)
+	stEvents.Plc.stEventsDef[21].bEventSignal;
+	stEvents.Plc.stEventsDef[21].nEventType;
+	
+(*PLC Event - 22*)
+	stEvents.Plc.stEventsDef[22].bEventSignal;
+	stEvents.Plc.stEventsDef[22].nEventType;
+	
+(*PLC Event - 23*)
+	stEvents.Plc.stEventsDef[23].bEventSignal;
+	stEvents.Plc.stEventsDef[23].nEventType;
+	
+(*PLC Event - 24*)
+	stEvents.Plc.stEventsDef[24].bEventSignal;
+	stEvents.Plc.stEventsDef[24].nEventType;
+	
+(*PLC Event - 25*)
+	stEvents.Plc.stEventsDef[25].bEventSignal;
+	stEvents.Plc.stEventsDef[25].nEventType;
+	
+(*PLC Event - 26*)
+	stEvents.Plc.stEventsDef[26].bEventSignal;
+	stEvents.Plc.stEventsDef[26].nEventType;
+	
+(*PLC Event - 27*)
+	stEvents.Plc.stEventsDef[27].bEventSignal;
+	stEvents.Plc.stEventsDef[27].nEventType;
+	
+(*PLC Event - 28*)
+	stEvents.Plc.stEventsDef[28].bEventSignal;
+	stEvents.Plc.stEventsDef[28].nEventType;
+	
+	
+	
+(*PLC Event - 99*)
+	stEvents.Plc.stEventsDef[99].bEventSignal;
+	stEvents.Plc.stEventsDef[99].nEventType;
+
+
+
+(*PLC Event - 100*)
+	stEvents.Plc.stEventsDef[100].bEventSignal;
+	stEvents.Plc.stEventsDef[100].nEventType;
+
+]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="Prg_EventControl">
+      <LineId Id="612" Count="1" />
+      <LineId Id="1175" Count="0" />
+      <LineId Id="615" Count="1" />
+      <LineId Id="619" Count="2" />
+      <LineId Id="1228" Count="0" />
+      <LineId Id="1260" Count="0" />
+      <LineId Id="1264" Count="6" />
+      <LineId Id="1261" Count="0" />
+      <LineId Id="1178" Count="0" />
+      <LineId Id="1165" Count="0" />
+      <LineId Id="1168" Count="4" />
+      <LineId Id="1166" Count="1" />
+      <LineId Id="633" Count="167" />
+      <LineId Id="952" Count="1" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="Prg_EventControl.Act_01_PlcEventDef">
+      <LineId Id="2" Count="39" />
+      <LineId Id="44" Count="4" />
+      <LineId Id="69" Count="1" />
+      <LineId Id="54" Count="0" />
+      <LineId Id="71" Count="2" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="76" Count="1" />
+      <LineId Id="75" Count="0" />
+      <LineId Id="78" Count="0" />
+      <LineId Id="80" Count="1" />
+      <LineId Id="79" Count="0" />
+      <LineId Id="82" Count="0" />
+      <LineId Id="84" Count="1" />
+      <LineId Id="83" Count="0" />
+      <LineId Id="86" Count="0" />
+      <LineId Id="88" Count="1" />
+      <LineId Id="87" Count="0" />
+      <LineId Id="90" Count="0" />
+      <LineId Id="92" Count="1" />
+      <LineId Id="91" Count="0" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="96" Count="1" />
+      <LineId Id="95" Count="0" />
+      <LineId Id="98" Count="0" />
+      <LineId Id="100" Count="1" />
+      <LineId Id="99" Count="0" />
+      <LineId Id="102" Count="0" />
+      <LineId Id="104" Count="1" />
+      <LineId Id="103" Count="0" />
+      <LineId Id="106" Count="0" />
+      <LineId Id="108" Count="1" />
+      <LineId Id="107" Count="0" />
+      <LineId Id="110" Count="0" />
+      <LineId Id="112" Count="1" />
+      <LineId Id="111" Count="0" />
+      <LineId Id="114" Count="0" />
+      <LineId Id="116" Count="1" />
+      <LineId Id="115" Count="0" />
+      <LineId Id="118" Count="0" />
+      <LineId Id="120" Count="1" />
+      <LineId Id="119" Count="0" />
+      <LineId Id="122" Count="0" />
+      <LineId Id="124" Count="1" />
+      <LineId Id="123" Count="0" />
+      <LineId Id="126" Count="0" />
+      <LineId Id="128" Count="1" />
+      <LineId Id="127" Count="0" />
+      <LineId Id="131" Count="0" />
+      <LineId Id="133" Count="1" />
+      <LineId Id="132" Count="0" />
+      <LineId Id="135" Count="0" />
+      <LineId Id="137" Count="1" />
+      <LineId Id="136" Count="0" />
+      <LineId Id="139" Count="0" />
+      <LineId Id="141" Count="1" />
+      <LineId Id="140" Count="0" />
+      <LineId Id="143" Count="2" />
+      <LineId Id="56" Count="3" />
+      <LineId Id="61" Count="5" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

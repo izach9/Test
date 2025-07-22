@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <GVL Name="GVL_EventControl" Id="{0f68978d-9dd9-498d-ae89-75184a3dd23a}">
+    <Declaration><![CDATA[VAR_GLOBAL
+	
+	stEvents				:ST_EventControl;
+	
+(*System Day/Time*)
+	sYear		:STRING(8);
+	sMonth		:STRING(8);
+	sDay		:STRING(8);
+
+	sHour		:STRING(8);
+	sMin		:STRING(8);
+	sSec		:STRING(8);
+
+	sDate		: STRING(32);
+	sTime		: STRING(32);
+	sDateTime	:STRING(80);
+(*System Day/Time*)
+
+(*Sample Events ***)	
+	bSamplePlcAlarm			:BOOL:=TRUE;
+	bSamplePlcWarning		:BOOL:=TRUE;
+	
+	bSampleNcAlarm			:BOOL:=TRUE;
+	nSampleNcErrorID		:INT:=17744;
+	
+	nSampleDriveDiagNumber	:UDINT:=53266;
+	sSampleDriveDiagMessage	:STRING:='Control and power section ready';
+(*Sample Events ***)	
+
+END_VAR
+
+VAR_GLOBAL CONSTANT
+	nPlcEventsNumber		:UINT:=100;		(*Maximum Number of PLC Events*)
+	nNcEventsNumber			:UINT:=32;		(*Maximum Number of NC Events*)
+	nDriveEventsNumber		:UINT:=32;		(*Maximum Number of Drive Events*)
+END_VAR
+]]></Declaration>
+  </GVL>
+</TcPlcObject>

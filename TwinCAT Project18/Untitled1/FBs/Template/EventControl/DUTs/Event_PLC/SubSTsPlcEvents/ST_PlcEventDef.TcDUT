@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <DUT Name="ST_PlcEventDef" Id="{7a56770a-55ac-4cd3-87df-a9ea5750993b}">
+    <Declaration><![CDATA[TYPE ST_PlcEventDef :
+STRUCT
+	bEventSignal	:BOOL;
+	nEventID		:INT;
+	nEventType	:INT:=1;	(*1:Alarm , 2:Warning , *)
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>
