@@ -8,8 +8,16 @@ END_VAR
     <Implementation>
       <ST><![CDATA[//]]></ST>
     </Implementation>
+    <Action Name="ACT_deneme" Id="{6305d8ff-c27a-49cd-8dfc-08fba6290b48}">
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Action>
     <LineIds Name="MAIN">
       <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="MAIN.ACT_deneme">
+      <LineId Id="1" Count="0" />
     </LineIds>
   </POU>
 </TcPlcObject>
