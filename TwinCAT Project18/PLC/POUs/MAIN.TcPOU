@@ -3,10 +3,14 @@
   <POU Name="MAIN" Id="{4ed37e00-bb03-4a14-80ff-f38f7977a9e4}" SpecialFunc="None">
     <Declaration><![CDATA[PROGRAM MAIN
 VAR
+	nCounter: INT;
 END_VAR
 ]]></Declaration>
     <Implementation>
-      <ST><![CDATA[//]]></ST>
+      <ST><![CDATA[//
+
+nCounter := nCounter + 1;
+	]]></ST>
     </Implementation>
     <Action Name="ACT_deneme" Id="{6305d8ff-c27a-49cd-8dfc-08fba6290b48}">
       <Implementation>
@@ -15,6 +19,9 @@ END_VAR
     </Action>
     <LineIds Name="MAIN">
       <LineId Id="2" Count="0" />
+      <LineId Id="7" Count="0" />
+      <LineId Id="6" Count="0" />
+      <LineId Id="8" Count="0" />
     </LineIds>
     <LineIds Name="MAIN.ACT_deneme">
       <LineId Id="1" Count="0" />
